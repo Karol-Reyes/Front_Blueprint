@@ -39,6 +39,17 @@ export const deleteBlueprint = createAsyncThunk(
   },
 )
 
+function removeBlueprintFromState(state, author, name) {
+  if (state.byAuthor[author]) {
+    state.byAuthor[author] = state.byAuthor[author].filter((item) => item.name !== name)
+    if (!state.byAuthor[author].length) {
+      delete state.byAuthor[author]
+      state.authors = state.authors.filter((item) => item !== author)
+    }
+  }
+  if (state.current?.author === author && state.current?.name === name) state.current = null
+}
+
 const slice = createSlice({
   name: 'blueprints',
   initialState: {
@@ -56,6 +67,18 @@ const slice = createSlice({
       }
       const cached = state.byAuthor[author]?.find((blueprint) => blueprint.name === name)
       if (cached) cached.points.push(point)
+    },
+    replaceBlueprintPoints(state, action) {
+      const { author, name, points } = action.payload
+      if (state.current?.author === author && state.current?.name === name) {
+        state.current.points = points
+      }
+      const cached = state.byAuthor[author]?.find((blueprint) => blueprint.name === name)
+      if (cached) cached.points = points
+    },
+    removeBlueprintLocally(state, action) {
+      const { author, name } = action.payload
+      removeBlueprintFromState(state, author, name)
     },
   },
   extraReducers: (builder) => {
@@ -93,17 +116,10 @@ const slice = createSlice({
       })
       .addCase(deleteBlueprint.fulfilled, (s, a) => {
         const { author, name } = a.payload
-        if (s.byAuthor[author]) {
-          s.byAuthor[author] = s.byAuthor[author].filter((item) => item.name !== name)
-          if (!s.byAuthor[author].length) {
-            delete s.byAuthor[author]
-            s.authors = s.authors.filter((item) => item !== author)
-          }
-        }
-        if (s.current?.author === author && s.current?.name === name) s.current = null
+        removeBlueprintFromState(s, author, name)
       })
   },
 })
 
-export const { appendPoint } = slice.actions
+export const { appendPoint, replaceBlueprintPoints, removeBlueprintLocally } = slice.actions
 export default slice.reducer

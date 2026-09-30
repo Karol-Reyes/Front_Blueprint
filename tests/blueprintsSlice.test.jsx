@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import reducer, {
   appendPoint,
   deleteBlueprint,
+  removeBlueprintLocally,
+  replaceBlueprintPoints,
   updateBlueprint,
 } from '../src/features/blueprints/blueprintsSlice.js'
 
@@ -56,5 +58,42 @@ describe('blueprints slice', () => {
     )
     expect(removed.current).toBeNull()
     expect(removed.authors).toEqual([])
+  })
+
+  it('replaces points after an UPDATED socket event', () => {
+    const blueprint = { author: 'ana', name: 'casa', points: [{ x: 1, y: 2 }] }
+    const state = {
+      authors: ['ana'],
+      byAuthor: { ana: [blueprint] },
+      current: blueprint,
+      status: 'succeeded',
+      error: null,
+    }
+    const points = [{ x: 1, y: 1 }, { x: 2, y: 2 }]
+
+    const updated = reducer(
+      state,
+      replaceBlueprintPoints({ author: 'ana', name: 'casa', points }),
+    )
+
+    expect(updated.current.points).toEqual(points)
+    expect(updated.byAuthor.ana[0].points).toEqual(points)
+  })
+
+  it('removes the blueprint after a DELETED socket event', () => {
+    const blueprint = { author: 'ana', name: 'casa', points: [{ x: 1, y: 2 }] }
+    const state = {
+      authors: ['ana'],
+      byAuthor: { ana: [blueprint] },
+      current: blueprint,
+      status: 'succeeded',
+      error: null,
+    }
+
+    const updated = reducer(state, removeBlueprintLocally({ author: 'ana', name: 'casa' }))
+
+    expect(updated.current).toBeNull()
+    expect(updated.byAuthor.ana).toBeUndefined()
+    expect(updated.authors).toEqual([])
   })
 })

@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { appendPoint, createBlueprint, deleteBlueprint, fetchAuthors, fetchBlueprint, fetchByAuthor, updateBlueprint } from '../features/blueprints/blueprintsSlice.js'
+import {
+  appendPoint,
+  createBlueprint,
+  deleteBlueprint,
+  fetchAuthors,
+  fetchBlueprint,
+  fetchByAuthor,
+  removeBlueprintLocally,
+  replaceBlueprintPoints,
+  updateBlueprint,
+} from '../features/blueprints/blueprintsSlice.js'
 import BlueprintCanvas from '../components/BlueprintCanvas.jsx'
 import BlueprintForm from '../components/BlueprintForm.jsx'
 import BlueprintList from '../components/BlueprintList.jsx'
@@ -37,7 +47,25 @@ export default function BlueprintsPage() {
       if (!active) return
       setConnectionStatus('connected')
       subscription = subscribeBlueprint(client, current.author, current.name, (event) => {
-        dispatch(appendPoint(event))
+        if (event.type === 'UPDATED') {
+          dispatch(
+            replaceBlueprintPoints({
+              author: current.author,
+              name: current.name,
+              points: event.points,
+            }),
+          )
+        } else if (event.type === 'DELETED') {
+          dispatch(removeBlueprintLocally({ author: current.author, name: current.name }))
+        } else if (event.point) {
+          dispatch(
+            appendPoint({
+              author: event.author || current.author,
+              name: event.name || current.name,
+              point: event.point,
+            }),
+          )
+        }
       })
     }
     client.onWebSocketClose = () => {
