@@ -47,10 +47,20 @@ Abre `http://localhost:5173`
 Crea un archivo `.env` en la raíz:
 
 ```variable
-VITE_API_BASE_URL=http://localhost:8080/api
+VITE_API_BASE_URL=http://localhost:8080
+VITE_STOMP_BASE_URL=http://localhost:8080
+VITE_USE_MOCK=false
 ```
 
 > **Tip:** en producción usa variables seguras o un _reverse proxy_.
+
+## Tiempo real y operaciones CRUD
+
+El selector RT permite trabajar sin conexión (`None`) o usar STOMP. Con STOMP, el cliente abre `/ws-blueprints`, publica los puntos en `/app/draw` y escucha `/topic/blueprints.{author}.{name}`. El backend debe estar en ejecución en la URL configurada en `VITE_STOMP_BASE_URL`.
+
+Al hacer clic en el canvas, el punto se añade localmente en modo `None` o se envía al backend en modo STOMP. `Save / Update` reemplaza los puntos del blueprint y `Delete` elimina el blueprint seleccionado. Las operaciones REST protegidas requieren iniciar sesión para enviar el JWT.
+
+El backend de este laboratorio implementa STOMP, no Socket.IO; por eso Socket.IO no aparece como opción activa en el selector.
 
 ## Estructura
 

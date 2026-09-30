@@ -33,5 +33,19 @@ const apiMock = {
     MOCK_DATA.push(created)
     return created
   },
+
+  async update(author, name, points) {
+    await delay()
+    const found = MOCK_DATA.find((bp) => bp.author === author && bp.name === name)
+    if (!found) throw new Error(`Blueprint not found: ${author}/${name}`)
+    found.points = points
+  },
+
+  async delete(author, name) {
+    await delay()
+    const index = MOCK_DATA.findIndex((bp) => bp.author === author && bp.name === name)
+    if (index < 0) throw new Error(`Blueprint not found: ${author}/${name}`)
+    MOCK_DATA.splice(index, 1)
+  },
 }
 export default apiMock
