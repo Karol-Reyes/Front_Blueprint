@@ -1,23 +1,61 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import {
-  fetchAuthors,
-  fetchByAuthor,
-  fetchBlueprint,
-} from '../features/blueprints/blueprintsSlice.js'
+import { appendPoint, createBlueprint, deleteBlueprint, fetchAuthors, fetchBlueprint, fetchByAuthor, updateBlueprint } from '../features/blueprints/blueprintsSlice.js'
 import BlueprintCanvas from '../components/BlueprintCanvas.jsx'
+import BlueprintForm from '../components/BlueprintForm.jsx'
 import BlueprintList from '../components/BlueprintList.jsx'
+import { createStompClient, subscribeBlueprint } from '../services/stompClient.js'
 
 export default function BlueprintsPage() {
   const dispatch = useDispatch()
   const { byAuthor, current, status } = useSelector((s) => s.blueprints)
+  const clientRef = useRef(null)
   const [authorInput, setAuthorInput] = useState('')
   const [selectedAuthor, setSelectedAuthor] = useState('')
+  const [realtimeMode, setRealtimeMode] = useState('none')
+  const [connectionStatus, setConnectionStatus] = useState('disconnected')
+  const [operationError, setOperationError] = useState('')
+  const [saving, setSaving] = useState(false)
   const items = byAuthor[selectedAuthor] || []
 
   useEffect(() => {
     dispatch(fetchAuthors())
   }, [dispatch])
+
+  useEffect(() => {
+    if (realtimeMode !== 'stomp' || !current) {
+      setConnectionStatus('disconnected')
+      return undefined
+    }
+
+    let active = true
+    let subscription
+    const client = createStompClient(
+      import.meta.env.VITE_STOMP_BASE_URL || 'http://localhost:8080',
+    )
+    client.onConnect = () => {
+      if (!active) return
+      setConnectionStatus('connected')
+      subscription = subscribeBlueprint(client, current.author, current.name, (event) => {
+        dispatch(appendPoint(event))
+      })
+    }
+    client.onWebSocketClose = () => {
+      if (active) setConnectionStatus('disconnected')
+    }
+    client.onStompError = () => {
+      if (active) setConnectionStatus('error')
+    }
+    client.activate()
+    clientRef.current = client
+
+    return () => {
+      active = false
+      subscription?.unsubscribe()
+      if (clientRef.current === client) clientRef.current = null
+      void client.deactivate()
+    }
+  }, [current?.author, current?.name, dispatch, realtimeMode])
 
   const totalPoints = useMemo(
     () => items.reduce((acc, bp) => acc + (bp.points?.length || 0), 0),
@@ -31,11 +69,72 @@ export default function BlueprintsPage() {
   }
 
   const openBlueprint = (bp) => {
+    setOperationError('')
     dispatch(fetchBlueprint({ author: bp.author, name: bp.name }))
   }
 
+  const create = async (blueprint) => {
+    setOperationError('')
+    try {
+      await dispatch(createBlueprint(blueprint)).unwrap()
+      setAuthorInput(blueprint.author)
+      setSelectedAuthor(blueprint.author)
+      await dispatch(fetchByAuthor(blueprint.author)).unwrap()
+    } catch (error) {
+      setOperationError(error.message || 'No se pudo crear el blueprint.')
+    }
+  }
+
+  const saveCurrent = async () => {
+    if (!current) return
+    setSaving(true)
+    setOperationError('')
+    try {
+      await dispatch(updateBlueprint(current)).unwrap()
+      await dispatch(fetchByAuthor(current.author)).unwrap()
+    } catch (error) {
+      setOperationError(error.message || 'No se pudo guardar el blueprint.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeCurrent = async () => {
+    if (!current || !window.confirm(`¿Eliminar ${current.name}?`)) return
+    setSaving(true)
+    setOperationError('')
+    try {
+      await dispatch(deleteBlueprint({ author: current.author, name: current.name })).unwrap()
+      await dispatch(fetchByAuthor(current.author)).unwrap()
+    } catch (error) {
+      setOperationError(error.message || 'No se pudo eliminar el blueprint.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const addPoint = (point) => {
+    if (!current) return
+    if (realtimeMode === 'stomp') {
+      if (!clientRef.current?.connected) {
+        setOperationError('STOMP aún no está conectado; el punto no se envió.')
+        return
+      }
+      clientRef.current.publish({
+        destination: '/app/draw',
+        body: JSON.stringify({
+          author: current.author,
+          name: current.name,
+          point,
+        }),
+      })
+      return
+    }
+    dispatch(appendPoint({ author: current.author, name: current.name, point }))
+  }
+
   return (
-    <div className="grid" style={{ gridTemplateColumns: '1.1fr 1.4fr', gap: 24 }}>
+    <div className="grid blueprints-layout">
       <section className="grid" style={{ gap: 16 }}>
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Blueprints</h2>
@@ -60,11 +159,40 @@ export default function BlueprintsPage() {
           <BlueprintList items={items} onSelect={openBlueprint} />
           <p style={{ marginTop: 12, fontWeight: 700 }}>Total user points: {totalPoints}</p>
         </div>
+        <BlueprintForm onSubmit={create} />
       </section>
 
       <section className="card">
-        <h3 style={{ marginTop: 0 }}>Current blueprint: {current?.name || '—'}</h3>
-        <BlueprintCanvas points={current?.points || []} />
+        <div className="blueprint-toolbar">
+          <h3 style={{ margin: 0 }}>Current blueprint: {current?.name || '—'}</h3>
+          <label className="realtime-control">
+            RT
+            <select
+              aria-label="Real-time mode"
+              className="input"
+              value={realtimeMode}
+              onChange={(event) => setRealtimeMode(event.target.value)}
+            >
+              <option value="none">None</option>
+              <option value="stomp">STOMP</option>
+            </select>
+          </label>
+        </div>
+        {realtimeMode === 'stomp' && (
+          <p role="status" className="connection-status">
+            {current ? `STOMP: ${connectionStatus}` : 'Abre un plano para conectar STOMP.'}
+          </p>
+        )}
+        {operationError && <p role="alert">{operationError}</p>}
+        <BlueprintCanvas points={current?.points || []} onPoint={current ? addPoint : undefined} />
+        <div className="blueprint-actions">
+          <button className="btn primary" onClick={saveCurrent} disabled={!current || saving}>
+            Save / Update
+          </button>
+          <button className="btn" onClick={removeCurrent} disabled={!current || saving}>
+            Delete
+          </button>
+        </div>
       </section>
     </div>
   )

@@ -22,5 +22,18 @@ const apiClientReal = {
     const { data } = await api.post('/api/blueprints', payload)
     return data
   },
+
+  async update(author, name, points) {
+    await api.put(
+      `/api/blueprints/${encodeURIComponent(author)}/${encodeURIComponent(name)}`,
+      points,
+    )
+  },
+
+  async delete(author, name) {
+    await api.delete(
+      `/api/blueprints/${encodeURIComponent(author)}/${encodeURIComponent(name)}`,
+    )
+  },
 }
 export default apiClientReal

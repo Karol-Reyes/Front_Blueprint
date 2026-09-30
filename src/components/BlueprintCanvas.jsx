@@ -1,7 +1,25 @@
 import { useEffect, useRef } from 'react'
 
-export default function BlueprintCanvas({ id = 'blueprint-canvas', points = [], width = 520, height = 360 }) {
+export default function BlueprintCanvas({
+  id = 'blueprint-canvas',
+  points = [],
+  width = 520,
+  height = 360,
+  onPoint,
+}) {
   const ref = useRef(null)
+
+  const handleClick = (event) => {
+    if (!onPoint) return
+    const canvas = ref.current
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / (rect.width || canvas.width)
+    const scaleY = canvas.height / (rect.height || canvas.height)
+    onPoint({
+      x: Math.round((event.clientX - rect.left) * scaleX),
+      y: Math.round((event.clientY - rect.top) * scaleY),
+    })
+  }
 
   useEffect(() => {
     const canvas = ref.current
@@ -30,38 +48,20 @@ export default function BlueprintCanvas({ id = 'blueprint-canvas', points = [], 
 
     if (points.length === 0) return
 
-    // Escala los puntos para que ocupen el canvas, si son puntos pequeños (ej, hasta 10) 
-    // la escala aumenta para verlos mejor
-    const padding = 30
-    const xs = points.map((p) => p.x)
-    const ys = points.map((p) => p.y)
-    const minX = Math.min(...xs)
-    const maxX = Math.max(...xs)
-    const minY = Math.min(...ys)
-    const maxY = Math.max(...ys)
-
-    const rangeX = maxX - minX || 1 // evita dividir por 0
-    const rangeY = maxY - minY || 1
-
-    const scaled = points.map((p) => ({
-      x: padding + ((p.x - minX) / rangeX) * (canvas.width - padding * 2),
-      y: padding + ((p.y - minY) / rangeY) * (canvas.height - padding * 2),
-    }))
-    
     if (points.length > 1) {
       ctx.strokeStyle = '#93c5fd'
       ctx.lineWidth = 2
       ctx.beginPath()
-      ctx.moveTo(scaled[0].x, scaled[0].y)
-      for (let i = 1; i < scaled.length; i++) {
-        const p = scaled[i]
+      ctx.moveTo(points[0].x, points[0].y)
+      for (let i = 1; i < points.length; i++) {
+        const p = points[i]
         ctx.lineTo(p.x, p.y)
       }
       ctx.stroke()
     }
     
     ctx.fillStyle = '#fbbf24'
-    for (const p of scaled) {
+    for (const p of points) {
       ctx.beginPath()
       ctx.arc(p.x, p.y, 4, 0, Math.PI * 2)
       ctx.fill()
@@ -72,6 +72,8 @@ export default function BlueprintCanvas({ id = 'blueprint-canvas', points = [], 
     <canvas
       id={id}
       ref={ref}
+      onClick={handleClick}
+      aria-label="Blueprint canvas. Click to add a point."
       width={width}
       height={height}
       style={{
